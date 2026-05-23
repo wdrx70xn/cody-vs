@@ -1,96 +1,79 @@
 name: Nightly Build
-
-on:
+'on':
   schedule:
-    - cron: "0 2 * * *" # Runs at 2 AM UTC every day
-  workflow_dispatch:
-
+  - cron: 0 2 * * *
+  workflow_dispatch: null
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   build:
     runs-on: 16gb_16_core_large_window_runner
-    if: github.repository_owner == 'sourcegraph'
+    if: github.repository_owner == 'wdrx70xn'
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
       Configuration: Debug
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Add msbuild
-        uses: microsoft/setup-msbuild@v2
-        
-      - name: Cache nuget
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-nuget-
-          
-      - name: Find the latest tag in Cody repository
-        uses: oprypin/find-latest-tag@v1.1.2
-        id: cody
-        with:
-          repository: sourcegraph/cody
-          regex: 'vscode(-insiders)?-v\d+\.\d+\.\d+'
-          sort-tags: true
-          token: ${{ secrets.PRIVATE_SG_ACCESS_TOKEN }}
-          
-      - name: Hash tag name
-        uses: pplanel/hash-calculator-action@v1.3.2
-        id: cody-hash
-        with:
-          input: ${{ steps.cody.outputs.tag }}
-          
-      - name: Cache agent
-        id: cache-agent
-        uses: actions/cache@v4
-        with:
-          path: src/Cody.VisualStudio/Agent
-          key: ${{ runner.os }}-agent-${{ steps.cody-hash.outputs.digest }}  
-        
-      - name: Build agent if needed (tag ${{ steps.cody.outputs.tag }})
-        if: ${{ steps.cache-agent.outputs.cache-hit != 'true' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.PRIVATE_SG_ACCESS_TOKEN }}
-        shell: pwsh
-        run: ./agent/buildAgent.ps1 -version ${{ steps.cody.outputs.tag }}
-        
-      - name: Build extension (${{ env.Configuration }})
-        shell: pwsh
-        run: ./src/build.ps1 -configuration ${{ env.Configuration }}
-        
-      - name: Upload Cody.VisualStudio.vsix artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Cody.VisualStudio.vsix
-          path: src/Cody.VisualStudio/bin/${{ env.Configuration }}/Cody.VisualStudio.vsix
-          retention-days: 20
-        
-      #Running tests  
-
-      - name: Change Screen Resolution
-        shell: pwsh
-        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
-        
-      - name: Run tests
-        env:
-          Access_Token_UI_Tests: ${{ secrets.SRC_ACCESS_TOKEN_S2 }}
-        run: dotnet test src/*Tests/bin/${{ env.Configuration }}/*.Tests.dll --logger:trx --verbosity detailed
-        
-      - name: Upload screenshots for UI tests
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: UI Tests Screenshots
-          path: src/Cody.VisualStudio.Tests/bin/${{ env.Configuration }}/Screenshots
-          retention-days: 20
-
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action/windows@v2
-        if: always()
-        with:
-          files: TestResults/**/*.trx
+    - uses: actions/checkout@v4
+    - name: Add msbuild
+      uses: microsoft/setup-msbuild@v2
+    - name: Cache nuget
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ github.sha }}
+        restore-keys: ${{ runner.os }}-nuget-
+    - name: Find the latest tag in Cody repository
+      uses: oprypin/find-latest-tag@v1.1.2
+      id: cody
+      with:
+        repository: sourcegraph/cody
+        regex: vscode(-insiders)?-v\d+\.\d+\.\d+
+        sort-tags: true
+        token: ${{ secrets.PRIVATE_SG_ACCESS_TOKEN }}
+    - name: Hash tag name
+      uses: pplanel/hash-calculator-action@v1.3.2
+      id: cody-hash
+      with:
+        input: ${{ steps.cody.outputs.tag }}
+    - name: Cache agent
+      id: cache-agent
+      uses: actions/cache@v4
+      with:
+        path: src/Cody.VisualStudio/Agent
+        key: ${{ runner.os }}-agent-${{ steps.cody-hash.outputs.digest }}
+    - name: Build agent if needed (tag ${{ steps.cody.outputs.tag }})
+      if: ${{ steps.cache-agent.outputs.cache-hit != 'true' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.PRIVATE_SG_ACCESS_TOKEN }}
+      shell: pwsh
+      run: ./agent/buildAgent.ps1 -version ${{ steps.cody.outputs.tag }}
+    - name: Build extension (${{ env.Configuration }})
+      shell: pwsh
+      run: ./src/build.ps1 -configuration ${{ env.Configuration }}
+    - name: Upload Cody.VisualStudio.vsix artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Cody.VisualStudio.vsix
+        path: src/Cody.VisualStudio/bin/${{ env.Configuration }}/Cody.VisualStudio.vsix
+        retention-days: 20
+    - name: Change Screen Resolution
+      shell: pwsh
+      run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+    - name: Run tests
+      env:
+        Access_Token_UI_Tests: ${{ secrets.SRC_ACCESS_TOKEN_S2 }}
+      run: dotnet test src/*Tests/bin/${{ env.Configuration }}/*.Tests.dll --logger:trx
+        --verbosity detailed
+    - name: Upload screenshots for UI tests
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: UI Tests Screenshots
+        path: src/Cody.VisualStudio.Tests/bin/${{ env.Configuration }}/Screenshots
+        retention-days: 20
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: always()
+      with:
+        files: TestResults/**/*.trx
